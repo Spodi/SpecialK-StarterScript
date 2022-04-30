@@ -1,0 +1,46 @@
+2.3.0 - reboot
+	[*]Complete rewrite.
+	[+]Now comes with (and requires) a module for controlling all SK stuff.
+	[+]Can now temporarily elevate itself with -SK_AsAdmin, even when the service was already runnning. In this mode the console needs to be kept open until the started app exited.
+	[-]No -SK_LegacyWait and -SK_Wait anymore.
+	[+]This is now handled by SK and set with -SK_AutoStop <Injected | Exit>.
+
+2.2.2 (Never released)
+	[*]Fixed whitelist encoding again, since SK changed. It is now UTF8.
+	[*]Now always trys to whitelist the app folder.
+
+2.2.1 (This version was mistakenly labeled as 3.3.0)
+	[*]Doesn't ask anymore, when service is already running. Assumes it should not be stopped.
+	[+]-SK_InjectOther <absolute path> to wait for this app to be injected instead (and whitelisted, if -SK_Whitelist is also given.)
+	[+]Ignores -Whitelist, if path contains \steamapps\, as this is already whitelisted by default.
+
+2.2.0
+	[+]Short therm global injection: Only runs Special K's service until it successfully injected itself in the started app (or times out after 1 minute).
+	[*]Uses short therm global injection as default now. To switch to the old behavior use -SK_LegacyWait.
+	[+]You can also use -SK_Wait <seconds> to wait a fixed amount of time before stopping the service, without any checks.
+
+2.1.2
+	[+]Now shows its name and version on startup.
+	[+]Uses standalone host process for Special K from SKIF, when found.
+	[*]Internal changes. Now uses event based shutdown for SK.
+	[*]Changed names of all parameters, so it is less likely colliding with launch options for the defined app. Please refer to the internal help.
+
+2.1.1
+	[*]Fixes whitelist encoding issues. Whitelist is now saved in your systems codepage instead of ASCII.
+
+2.1.0
+	[*]Now searches SK in actual Windows Documents folder, even if not in default location. Thanks again Aemony.
+	[+]Implemented help. Run without any parameter to read.
+	[+]EXPERIMENTAL: Automatic whitelisting with parameter -Whitelist. Needs testing. Backup you whitelist, just in case.
+
+2.0.1
+	[+]Waits for SK to be ready before starting the defined app.
+
+2.0.0
+	[*]Rewrite in PowerShell 5.1
+	[*]The Batch file is now only a wrapper that starts a PowerShell script (*.ps1) with the same name as the Batch (*.bat).
+	[+]Supports launchers and restarts (via SK or app itself). Keeps global injection running while any child processes of the started app are running.
+
+1.0.1
+	[*]Initial Batch Version
+	[*]Inspired by @Xuru#0294's question on Special K's Discord
