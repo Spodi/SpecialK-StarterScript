@@ -1,12 +1,17 @@
+2.3.1
+	[#]Fixed launch parameter.
+	[#]Fixed failsafes not working.
+	[*]Using Runspaces now for failsafes. Luckily Powershell kills all runspaces when the main thread is closed...
+
 2.3.0 - reboot
 	[*]Complete rewrite.
 	[+]Now comes with (and requires) a module for controlling all SK stuff.
-	[+]Can now temporarily elevate itself with -SK_AsAdmin, even when the service was already runnning. In this mode the console needs to be kept open until the started app exited.
+	[+]Can now temporarily elevate itself with -SK_AsAdmin, even when the service was already runnning. In this mode the console needs to be kept open when the service was already running until the started app exited to restart the service with normal privileges.
 	[-]No -SK_LegacyWait and -SK_Wait anymore.
-	[+]This is now handled by SK and set with -SK_AutoStop <Injected | Exit>.
+	[+]This is now handled by SK and set with -SK_AutoStop <Injected | Exit>. With -SK_AutoStop Exit the console needs to be kept open until the started app exited, so it can actually stop the service.
 
 2.2.2 (Never released)
-	[*]Fixed whitelist encoding again, since SK changed. It is now UTF8.
+	[#]Fixed whitelist encoding again, since SK changed. It is now UTF8.
 	[*]Now always trys to whitelist the app folder.
 
 2.2.1 (This version was mistakenly labeled as 3.3.0)
@@ -26,7 +31,7 @@
 	[*]Changed names of all parameters, so it is less likely colliding with launch options for the defined app. Please refer to the internal help.
 
 2.1.1
-	[*]Fixes whitelist encoding issues. Whitelist is now saved in your systems codepage instead of ASCII.
+	[#]Fixes whitelist encoding issues. Whitelist is now saved in your systems codepage instead of ASCII.
 
 2.1.0
 	[*]Now searches SK in actual Windows Documents folder, even if not in default location. Thanks again Aemony.

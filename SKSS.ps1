@@ -14,7 +14,20 @@ If you want to use this within Steam follow these steps:
 You can also drag & Drop an executable at the wrapper batch.
 
 Special K Starter Script
-Created by Spodi
+    Copyright (C) 2022  Spodi
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 .EXAMPLE
 SKSS.bat "D:\SteamLibrary\steamapps\common\Monster Hunter World\MonsterHunterWorld.exe" -ipv4 anotheroption
@@ -38,6 +51,9 @@ SKSS.bat "D:\SteamLibrary\steamapps\common\Monster Hunter World\MonsterHunterWor
 Starts MonsterHunterWorld.exe with launch options set to: -ipv4 -SK_AutoStop "Test"
 
 No equivalent in Steam!
+
+.COMPONENT
+Requires Module SpecialK_PSLibrary
 
 .PARAMETER SK_StartApp
 [MANDATORY]
@@ -69,32 +85,31 @@ Waits until the app and all child processes are closed instead waiting until Spe
 
 - Exit
 Same as above, but also doesn't stop the injection service until the script ends. Keeps the service running even when the app is restarted trough Special K or the app itself. Useful when Special K activates in a launcher and the service stops prematurly or you have to regularly auto-restart the app.
-
-.PARAMETER Service
-- Start
-Starts Special Ks global injection service.
-
-- Restart
-REstarts Special Ks global injection service.
-
-- Stop
-Stops Special Ks global injection service.
+The console needs to be kept open until the started app exited, so it can actually stop the service.
 
 .PARAMETER SK_AsAdmin
 Starts the service with elevated rights (Admin).
+In this mode the console needs to be kept open when the service was already running until the started app exited to restart the service with normal privileges.
+
+.PARAMETER SK_AdminMode
+Internal parameter that is used with "-SK_AsAdmin".
+Do NOT use this to start the script!
+
+.PARAMETER SK_WorkingDirectory
+Internal parameter that normally is used with "-SK_AsAdmin".
+You can use this to set the working directory of the script.
 
 .PARAMETER SK_Help
 Shows this help in a new window. Essentally the same as Get-Help <ScriptName> -ShowWindow.
 Only works if called from a terminal.
 #>
-param([CmdletBinding(PositionalBinding = $false)]
+param([CmdletBinding(PositionalBinding = $false, DefaultParameterSetName="AutoMode")]
 	[Parameter(ParameterSetName = "AdminMode", Position = 0, Mandatory)]					[Parameter(ParameterSetName = "AutoMode", Position = 0, Mandatory)]						[string]	$SK_StartApp,
 	[Parameter(ParameterSetName = "AdminMode", Position = 1, ValueFromRemainingArguments)]	[Parameter(ParameterSetName = "AutoMode", Position = 1, ValueFromRemainingArguments)]	[string[]]	$SK_AppParams,
 	[Parameter(ParameterSetName = "AdminMode", Mandatory)]									[Parameter(ParameterSetName = "AutoMode")]												[string]	$SK_WorkingDirectory,
 	[Parameter(ParameterSetName = "AdminMode")]												[Parameter(ParameterSetName = "AutoMode")]												[string]	$SK_InjectOther,
-	[Parameter(ParameterSetName = "AdminMode")]												[Parameter(ParameterSetName = "AutoMode")]	[ValidateSet("Injected", "Exit")]			[string]	$SK_WaitFor,
+	[Parameter(ParameterSetName = "AdminMode")]												[Parameter(ParameterSetName = "AutoMode")]	[ValidateSet("Injected", "Exit")]			[string]	$SK_AutoStop,
 	[Parameter(ParameterSetName = "AdminMode", Mandatory)]																															[switch]	$SK_AdminMode,
-	#[Parameter(ParameterSetName = "ServiceControl", Mandatory)]																			[ValidateSet("Start", "Restart", "Stop")]	[string]	$SK_Service,
 	[Parameter(ParameterSetName = "ServiceControl")]										[Parameter(ParameterSetName = "AutoMode")]												[switch]	$SK_AsAdmin,
 	[Parameter(ParameterSetName = "ServiceControl")]										[Parameter(ParameterSetName = "AutoMode")]												[string]
 	# ------------------------------ <SETTINGS> ------------------------------
@@ -110,7 +125,6 @@ param([CmdletBinding(PositionalBinding = $false)]
 )
 
 #region -------------------------- <FUNCTIONS> -----------------------------
-
 function IsAdministrator {
 	$Identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
 	$Principal = New-Object System.Security.Principal.WindowsPrincipal($Identity)
@@ -125,8 +139,8 @@ function IsUacEnabled {
 if ($SK_WorkingDirectory) {
 	Set-Location $SK_WorkingDirectory
 }
-Write-Host (get-location).Path
-Import-Module "$PSScriptRoot\SpecialK_CMDs.psm1"
+
+Import-Module (join-path $PSScriptRoot "SpecialK_PSLibrary.psm1")
 
 Add-Type -Name ConsoleUtils -Namespace WPIA -MemberDefinition @'
    [DllImport("Kernel32.dll")]
@@ -135,12 +149,18 @@ Add-Type -Name ConsoleUtils -Namespace WPIA -MemberDefinition @'
    public static extern bool ShowWindow(IntPtr hWnd, Int32 nCmdShow);
 '@
 $ConsoleMode = @{
- HIDDEN    = 0;
- NORMAL    = 1;
- MINIMIZED = 2;
- MAXIMIZED = 3;
- SHOW      = 5
- RESTORE   = 9
+ Hide               = 0
+ Normal             = 1
+ Minimize           = 2
+ Maximize           = 3
+ NormalNoActivate   = 4
+ Show               = 5
+ MinimizeShowNext   = 6
+ MinimizeNoActivate	= 7
+ ShowNoActivate     = 8
+ Restore            = 9
+ Default            = 10
+ ForceMinimize      = 11
 }
 $hWnd = [WPIA.ConsoleUtils]::GetConsoleWindow()
 
@@ -152,18 +172,18 @@ Write-Host -NoNewline -ForegroundColor 'White' 'S'
 Write-Host -NoNewline -ForegroundColor 'Gray' 'tarter '
 Write-Host -NoNewline -ForegroundColor 'White' 'S'
 Write-Host -ForegroundColor 'Gray' 'cript'
-Write-Host 'v2.3.0
+Write-Host 'v2.3.1
 '
 
 Write-Host -NoNewline -ForegroundColor 'White' 'S'
 Write-Host -NoNewline -ForegroundColor 'Gray' 'pecial '
 Write-Host -ForegroundColor 'White' 'K'
 
-$Versions = Get-SkVersions -SkInstallPath $SK_InstallPath
+$Versions = Get-SkVersion -SkInstallPath $SK_InstallPath
 Write-Host "32Bit v$(($Versions | Where-Object 'Name' -EQ 'SpecialK32.dll').ProductVersion) | 64Bit v$(($Versions | Where-Object 'Name' -EQ 'SpecialK64.dll').ProductVersion)
 "
 Remove-Variable 'Versions'
-
+$IsRunning = $null
 if (Get-SkTeardownStatus | Get-SkServiceProcess -SkInstallPath $SK_InstallPath) {
 	$IsRunning = $true
 }
@@ -183,14 +203,15 @@ if ($SK_AsAdmin) {
 			}
 			$argList += $MyInvocation.UnboundArguments
 			Write-Host 'Elevating Script...'
-			[WPIA.ConsoleUtils]::ShowWindow($hWnd, $ConsoleMode.HIDDEN) | Out-Null
-			[WPIA.ConsoleUtils]::ShowWindow($hWnd, $ConsoleMode.MINIMIZED) | Out-Null
+			[void][WPIA.ConsoleUtils]::ShowWindow($hWnd, $ConsoleMode.Hide)
+			[void][WPIA.ConsoleUtils]::ShowWindow($hWnd, $ConsoleMode.MinimizeNoActivate)
+			[void][WPIA.ConsoleUtils]::ShowWindow($hWnd, $ConsoleMode.Hide)
 			try {
-			Start-Process PowerShell.exe -wait -Verb Runas -WorkingDirectory (get-location).Path -ArgumentList $argList -ErrorAction 'Stop'
+				Start-Process PowerShell.exe -PassThru -Verb Runas -WorkingDirectory (get-location).Path -ArgumentList $argList -ErrorAction 'Stop' | Wait-Process
 			}
 			finally {}
-			[WPIA.ConsoleUtils]::ShowWindow($hWnd, $ConsoleMode.SHOW) | Out-Null
-			[WPIA.ConsoleUtils]::ShowWindow($hWnd, $ConsoleMode.RESTORE) | Out-Null
+			[void][WPIA.ConsoleUtils]::ShowWindow($hWnd, $ConsoleMode.ShowNoActivate)
+			[void][WPIA.ConsoleUtils]::ShowWindow($hWnd, $ConsoleMode.NormalNoActivate)
 
 
 			Write-Host 'Returned to normal privileges.'
@@ -220,6 +241,11 @@ if (! $SK_StartAppPath) {
 	$SK_StartAppPath = (get-location).Path
 }
 
+if ($SK_AdminMode -and $IsRunning) {
+	Write-Host 'Stopping unelevated global injection service...'
+	Stop-SkService -SkInstallPath $SK_InstallPath
+}
+
 if (! $SK_AsAdmin) {
 	#only run if you don't spawn the second instance
 	#Whitelist handling
@@ -240,25 +266,25 @@ if (! $SK_AsAdmin) {
 	}
 
 
-	if ($SK_AdminMode -and $IsRunning) {
-		Stop-SkService -SkInstallPath $SK_InstallPath
-		Start-Sleep -Milliseconds 500
-	}
+
 	Write-Host 'Starting global injection service...'
 	Start-SkService -SkInstallPath $SK_InstallPath
 
 
 	Write-Host "Starting `"$SK_StartApp`" $SK_AppParams"
 
-	Start-SkService -SkInstallPath $SK_InstallPath
 	$jobInput = New-Object PSObject
 	Add-Member -InputObject $jobInput -MemberType 'NoteProperty' -Name 'StartApp'		-Value $SK_StartApp
 	Add-Member -InputObject $jobInput -MemberType 'NoteProperty' -Name 'StartAppPath'	-Value $SK_StartAppPath
 	Add-Member -InputObject $jobInput -MemberType 'NoteProperty' -Name 'AppParams'		-Value $SK_AppParams
 	Add-Member -InputObject $jobInput -MemberType 'NoteProperty' -Name 'WorkingDir'		-Value (Get-Location).Path
-
-	$job = Start-Job -InputObject $jobInput -ScriptBlock {
-		end {
+	
+	$StarterRunspace = [runspacefactory]::CreateRunspace()
+	$StarterRunspace.Open()
+	$StarterRunspace.SessionStateProxy.SetVariable('jobInput', $jobInput)
+	$StarterPowershell = [powershell]::Create()
+	$StarterPowershell.Runspace = $StarterRunspace
+	[void]$StarterPowershell.AddScript({
 			function Start-ProcessSK {
 				<#
 			.SYNOPSIS
@@ -266,89 +292,67 @@ if (! $SK_AsAdmin) {
 			#>
 				param(
 					[string][Parameter(Mandatory, Position = 0)]$FilePath,
-					[string][Parameter(Position = 1)][AllowEmptyString()]$ArgumentList,
-					[switch]$PassThru,
-					[switch]$Wait,
+					[string[]][Parameter(Position = 1)][AllowEmptyString()]$ArgumentList,
 					[string][AllowEmptyString()]$WorkingDirectory
 				)
-				if ($Wait -and $PassThru) {
-					if ($ArgumentList -and $WorkingDirectory) { 
-						Start-Process -Wait -PassThru -FilePath $FilePath -WorkingDirectory $WorkingDirectory -ArgumentList $ArgumentList
-					}
-					elseif ($ArgumentList) {
-						Start-Process -Wait -PassThru -FilePath $FilePath -ArgumentList $ArgumentList
-					}
-					elseif ($WorkingDirectory) {
-						Start-Process -Wait -PassThru -FilePath $FilePath -WorkingDirectory $WorkingDirectory
-					}
-					else {
-						Start-Process -Wait -PassThru -FilePath $FilePath
-					}
+				if ($ArgumentList -and $WorkingDirectory) {
+					Start-Process -Wait -FilePath $FilePath -WorkingDirectory $WorkingDirectory -ArgumentList $ArgumentList
 				}
-				elseif ($Wait) {
-					if ($ArgumentList -and $WorkingDirectory) { 
-						Start-Process -Wait -FilePath $FilePath -WorkingDirectory $WorkingDirectory -ArgumentList $ArgumentList
-					}
-					elseif ($ArgumentList) {
-						Start-Process -Wait -FilePath $FilePath -ArgumentList $ArgumentList
-					}
-					elseif ($WorkingDirectory) {
-						Start-Process -Wait -FilePath $FilePath -WorkingDirectory $WorkingDirectory
-					}
-					else {
-						Start-Process -Wait -FilePath $FilePath
-					}
+				elseif ($ArgumentList) {
+					Start-Process -Wait -FilePath $FilePath -ArgumentList $ArgumentList
 				}
-				elseif ($PassThru) {
-					if ($ArgumentList -and $WorkingDirectory) { 
-						Start-Process -PassThru -FilePath $FilePath -WorkingDirectory $WorkingDirectory -ArgumentList $ArgumentList
-					}
-					elseif ($ArgumentList) {
-						Start-Process -PassThru -FilePath $FilePath -ArgumentList $ArgumentList
-					}
-					elseif ($WorkingDirectory) {
-						Start-Process -PassThru -FilePath $FilePath -WorkingDirectory $WorkingDirectory
-					}
-					else {
-						Start-Process -PassThru -FilePath $FilePath
-					}
+				elseif ($WorkingDirectory) {
+					Start-Process -Wait -FilePath $FilePath -WorkingDirectory $WorkingDirectory
 				}
 				else {
-					if ($ArgumentList -and $WorkingDirectory) { 
-						Start-Process -FilePath $FilePath -WorkingDirectory $WorkingDirectory -ArgumentList $ArgumentList
-					}
-					elseif ($ArgumentList) {
-						Start-Process -FilePath $FilePath -ArgumentList $ArgumentList
-					}
-					elseif ($WorkingDirectory) {
-						Start-Process -FilePath $FilePath -WorkingDirectory $WorkingDirectory
-					}
-					else {
-						Start-Process -FilePath $FilePath
-					}
+					Start-Process -Wait -FilePath $FilePath
 				}
 			}
-			$data = $input | ConvertTo-Json | ConvertFrom-Json #Welp, input disappers after access. so there has to be a deep copy, as asigning a variable to another just creates a reference, that will also disappear
-			Set-Location $data.WorkingDir
-			Start-ProcessSK -wait -PassThru -FilePath $data.StartApp -WorkingDirectory $data.StartAppPath -ArgumentList $data.AppParams -ErrorAction 'Stop'
-		}
+			Set-Location $jobInput.WorkingDir
+			Start-ProcessSK -FilePath $jobInput.StartApp -WorkingDirectory $jobInput.StartAppPath -ArgumentList $jobInput.AppParams # -ErrorAction 'Stop'
+		})
+
+	$WaiterRunspace = [runspacefactory]::CreateRunspace()
+	$WaiterRunspace.Open()
+	$WaiterRunspace.SessionStateProxy.SetVariable('Path', $PSScriptRoot)
+	$WaiterRunspace.SessionStateProxy.SetVariable('SK_AutoStop', $SK_AutoStop)
+	$WaiterPowershell = [powershell]::Create()
+	$WaiterPowershell.Runspace = $WaiterRunspace
+	[void]$WaiterPowershell.AddScript({
+			Import-Module (join-path $path "SpecialK_PSLibrary.psm1")
+			Wait-SkAck -When $SK_AutoStop
+		})
+
+	[void][WPIA.ConsoleUtils]::ShowWindow($hWnd, $ConsoleMode.MinimizeNoActivate)
+	
+	$StarterHandle = $StarterPowershell.BeginInvoke()
+	$WaiterHandle = $WaiterPowershell.BeginInvoke()
+
+
+	While (!($StarterHandle.IsCompleted) -and !($WaiterHandle.IsCompleted)) {
+		Start-Sleep -Milliseconds 250
 	}
-	[WPIA.ConsoleUtils]::ShowWindow($hWnd, $ConsoleMode.MINIMIZED) | Out-Null
-	$jobcheck = $job | Get-Job
-	if ($jobcheck.State -ne 'Failed') {
-		Wait-SkAck -When $SK_WaitFor
-	}
+
 
 	if ((! $IsRunning) -or ($SK_AdminMode)) {
 		Stop-SkService -SkInstallPath $SK_InstallPath
-
 	}
-
-	if ($SK_AdminMode) {
-		$job | Wait-Job | Out-Null
-		Start-Sleep -Milliseconds 500
+	if (($SK_AdminMode) -and ($IsRunning)) {
+		while (! $StarterHandle.IsCompleted) {
+			Start-Sleep -Milliseconds 250
+		}
+		
 	}
-	[WPIA.ConsoleUtils]::ShowWindow($hWnd, $ConsoleMode.RESTORE) | Out-Null
+	[void][WPIA.ConsoleUtils]::ShowWindow($hWnd, $ConsoleMode.NormalNoActivate)
+	
+
+	#$StarterPowershell.EndInvoke($StarterHandle)
+	$StarterPowershell.Dispose()
+	$StarterRunspace.CloseAsync()
+	#$WaiterPowershell.EndInvoke($WaiterHandle)
+	#$WaiterPowershell.Dispose()
+	$WaiterRunspace.CloseAsync()
+
 	if ($WhitelistWritten) {
 		Write-Host 'Removing' $WhitelistItem 'from whitelist'
 		Remove-SkList -Type 'allow' $WhitelistItem
@@ -360,7 +364,7 @@ if (! $SK_AsAdmin) {
 
 
 }
-If (($IsRunning) -and (! $SK_AdminMode)) {
+If (($IsRunning) -and ($SK_AsAdmin)) {
 	Write-Host 'Restarting Service...'
 	Start-SkService -SkInstallPath $SK_InstallPath
 }
