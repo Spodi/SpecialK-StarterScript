@@ -266,7 +266,7 @@ Function Start-SkService {
 		}
 		else {
 			if (!(Test-Path -LiteralPath $ServletPath -PathType 'Container')) {
-				New-Item $ServletPath -ItemType 'Directory'
+				[void](New-Item $ServletPath -ItemType 'Directory')
 			}
 			$rundll = Join-Path -Path ([Environment]::GetFolderPath('SystemX86')) 'rundll32.exe'
 			If (Test-Path -LiteralPath "$rundll" -PathType leaf) {
@@ -300,7 +300,7 @@ Function Start-SkService {
 			}
 			else {
 				if (!(Test-Path -LiteralPath $ServletPath -PathType 'Container')) {
-					New-Item $ServletPath -ItemType 'Directory'
+					[void](New-Item $ServletPath -ItemType 'Directory')
 				}
 				$rundll = Join-Path -Path ([Environment]::GetFolderPath('System')) 'rundll32.exe'
 				If (Test-Path -LiteralPath "$rundll" -PathType 'Leaf') {
@@ -357,7 +357,7 @@ Function Stop-SkService {
 		}
 		else {
 			if (!(Test-Path -LiteralPath $ServletPath -PathType 'Container')) {
-				New-Item $ServletPath -ItemType 'Directory'
+				[void](New-Item $ServletPath -ItemType 'Directory')
 			}
 			$rundll = Join-Path -Path ([Environment]::GetFolderPath('SystemX86')) 'rundll32.exe'
 			If (Test-Path -LiteralPath $rundll -PathType leaf) {
@@ -379,7 +379,7 @@ Function Stop-SkService {
 			}
 			else {
 				if (!(Test-Path -LiteralPath $ServletPath -PathType 'Container')) {
-					New-Item $ServletPath -ItemType 'Directory'
+					[void](New-Item $ServletPath -ItemType 'Directory')
 				}
 				$rundll = Join-Path -Path ([Environment]::GetFolderPath('System')) 'rundll32.exe'
 				If (Test-Path -LiteralPath $rundll -PathType 'Leaf') {
@@ -479,9 +479,9 @@ function Add-SkList {
 			Write-Warning "`"$Path`" does not exist and will be created."
 			$parent = (Split-Path $Path -Parent)
 			if (! (Test-Path $parent -PathType 'Container')) {
-				New-Item $parent -ItemType 'Directory'
+				[void](New-Item $parent -ItemType 'Directory')
 			}
-			New-Item $Path -ItemType 'File'
+			[void](New-Item $Path -ItemType 'File')
 		}
 
 		if (! $Raw) {
