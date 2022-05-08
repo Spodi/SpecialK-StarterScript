@@ -63,20 +63,19 @@ function Get-SkTeardownStatus {
 	.SYNOPSIS
 	Returns an array of which teardown handles are aviailable (32, 64). Might also get handles when the injection service is not running, but SK is still injected in a process.
 	#>
-	$output = @()
+
 	try {
 		$SK_Event = [System.Threading.EventWaitHandle]::OpenExisting("Local\SK_GlobalHookTeardown32")
 		$SK_Event.close()
-		$output += [string]'32'
+		Write-Output -InputObject [string]'32'
 	}
 	catch { }
 	try {
 		$SK_Event = [System.Threading.EventWaitHandle]::OpenExisting("Local\SK_GlobalHookTeardown64")
 		$SK_Event.close()
-		$output += [string]'64'
+		Write-Output -InputObject [string]'64'
 	}
 	catch { }
-	Write-Output $output
 }
 
 function Get-SkTeardown {
@@ -98,10 +97,6 @@ function Get-SkTeardown {
 		[Parameter()]														[int]		$Timeout
 	)
 
-	begin {
-		$output = @()
-	}
-
 	process {
 		if ($Timeout) {
 			$times = [math]::Truncate($Timeout / 250)
@@ -109,7 +104,7 @@ function Get-SkTeardown {
 			while ($i -le $times) {
 				Try {
 					$SK_Event = [System.Threading.EventWaitHandle]::OpenExisting("Local\SK_GlobalHookTeardown$Bitness")
-					$output += $SK_Event
+					Write-Output $SK_Event
 					break
 				}
 				Catch {
@@ -121,14 +116,10 @@ function Get-SkTeardown {
 		else {
 			Try {
 				$SK_Event = [System.Threading.EventWaitHandle]::OpenExisting("Local\SK_GlobalHookTeardown$Bitness")
-				$output += $SK_Event
+				Write-Output $SK_Event
 			}
 			Catch { }
 		}
-	}
-
-	end {
-		Write-Output $output
 	}
 }
 
@@ -152,7 +143,6 @@ function Get-SkServiceProcess {
 	)
 
 	begin {
-		$output = @()
 		try {
 			$InstallPath = Get-SkPath $SkInstallPath -ErrorAction 'Stop'
 		}
@@ -173,7 +163,7 @@ function Get-SkServiceProcess {
 				Try {
 					$ID = Get-Content -LiteralPath $Path -ErrorAction 'Stop'
 					$Process = Get-Process -ID $ID -ErrorAction 'Stop'
-					$output += $Process
+					Write-Output $Process
 					break
 				}
 				Catch {
@@ -189,14 +179,10 @@ function Get-SkServiceProcess {
 					$Process = Get-Process -ID $ID -ErrorAction 'Stop'
 				}
 				catch [Microsoft.PowerShell.Commands.ProcessCommandException] {}
-				$output += $Process
+				Write-Output $Process
 			}
 		}
 			
-	}
-
-	end {
-		Write-Output $output
 	}
 }
 
@@ -233,7 +219,7 @@ function Wait-SkAck {
 			[void]$handle.WaitOne()
 		}
 		$handle.Close()
-		if ($output) { $output }
+		if ($output) { Write-Output $output }
 		return
 	}
 	else {
@@ -245,7 +231,7 @@ function Wait-SkAck {
 			[void]$handle.WaitOne()
 		}
 		$handle.Close()
-		if ($output) { $output }
+		if ($output) { Write-Output $output }
 		return
 	}
 }
@@ -273,13 +259,15 @@ Function Start-SkService {
 	$SK32 = (Join-Path -Path $InstallPath -ChildPath '\SpecialK32.dll')
 	$SK64 = (Join-Path -Path $InstallPath -ChildPath '\SpecialK64.dll')
 
-
 	if (Test-Path -LiteralPath $SK32) {
 		If (Test-Path -LiteralPath "$ServletPath\SKIFsvc32.exe" -PathType leaf) {
 			Write-Information 'Starting 32Bit service (SKIF Standalone)...'
 			Start-Process -FilePath "$ServletPath\SKIFsvc32.exe" -WorkingDirectory $ServletPath -ArgumentList "Start"
 		}
 		else {
+			if (!(Test-Path -LiteralPath $ServletPath -PathType 'Container')) {
+				New-Item $ServletPath -ItemType 'Directory'
+			}
 			$rundll = Join-Path -Path ([Environment]::GetFolderPath('SystemX86')) 'rundll32.exe'
 			If (Test-Path -LiteralPath "$rundll" -PathType leaf) {
 				Write-Information 'Starting 32Bit service (Rundll32)...'
@@ -311,6 +299,9 @@ Function Start-SkService {
 				Start-Process -FilePath "$ServletPath\SKIFsvc64.exe" -WorkingDirectory $ServletPath -ArgumentList "Start"
 			}
 			else {
+				if (!(Test-Path -LiteralPath $ServletPath -PathType 'Container')) {
+					New-Item $ServletPath -ItemType 'Directory'
+				}
 				$rundll = Join-Path -Path ([Environment]::GetFolderPath('System')) 'rundll32.exe'
 				If (Test-Path -LiteralPath "$rundll" -PathType 'Leaf') {
 					Write-Information 'Starting 64Bit service (Rundll32)...'
@@ -365,6 +356,9 @@ Function Stop-SkService {
 			Start-Process -FilePath "$ServletPath\SKIFsvc32.exe" -WorkingDirectory $ServletPath -ArgumentList "Stop"
 		}
 		else {
+			if (!(Test-Path -LiteralPath $ServletPath -PathType 'Container')) {
+				New-Item $ServletPath -ItemType 'Directory'
+			}
 			$rundll = Join-Path -Path ([Environment]::GetFolderPath('SystemX86')) 'rundll32.exe'
 			If (Test-Path -LiteralPath $rundll -PathType leaf) {
 				Write-Information 'Stopping 32Bit service (Rundll32)...'
@@ -384,6 +378,9 @@ Function Stop-SkService {
 				Start-Process -FilePath "$ServletPath\SKIFsvc64.exe" -WorkingDirectory $ServletPath -ArgumentList "Stop"
 			}
 			else {
+				if (!(Test-Path -LiteralPath $ServletPath -PathType 'Container')) {
+					New-Item $ServletPath -ItemType 'Directory'
+				}
 				$rundll = Join-Path -Path ([Environment]::GetFolderPath('System')) 'rundll32.exe'
 				If (Test-Path -LiteralPath $rundll -PathType 'Leaf') {
 					Write-Information 'Stopping 64Bit service (Rundll32)...'
@@ -405,7 +402,7 @@ function Get-SkList {
 
 	[CmdletBinding(PositionalBinding = $false)]
 	param (
-		[Parameter(Mandatory)][ValidateSet('white', 'black', 'allow', 'deny')]	[string]	$Type,
+		[Parameter(Mandatory)][ValidateSet('white', 'black', 'allow', 'deny')]						[string]	$Type,
 		[Parameter(ValueFromPipelineByPropertyName)][AllowEmptyString()][Alias('PSPath', 'Path')]	[string]	$SkInstallPath
 	)
 
@@ -457,7 +454,7 @@ function Add-SkList {
 		[Parameter(ValueFromPipelineByPropertyName)][AllowEmptyString()][Alias('PSPath', 'Path')]	[string]	$SkInstallPath
 	)
 
-	Process {
+	begin {
 		try {
 			$InstallPath = Get-SkPath $SkInstallPath -ErrorAction 'Stop'
 		}
@@ -465,6 +462,9 @@ function Add-SkList {
 			Write-Error -Category 'ObjectNotFound' "The Path `"$SkInstallPath`" is no valid Special K installation. No SpecialK32.dll or SpecialK64.dll was found."
 			break
 		}
+	}
+	Process {
+		
 		if (($Type -eq 'white') -or (($Type -eq 'allow'))) {
 			$Path = (Join-Path -Path $InstallPath -ChildPath '\Global\whitelist.ini')
 			if (($Value -like '*SteamApps*') -or ($Value -like '*Epic Games\*') -or ($Value -like '*GOG Galaxy\Games*') -or ($Value -like '*Origin Games\*')) {
@@ -477,7 +477,7 @@ function Add-SkList {
 		}
 		if (! (Test-Path -LiteralPath $Path -PathType 'Leaf')) {
 			Write-Warning "`"$Path`" does not exist and will be created."
-			$parent = -LiteralPath (Split-Path $Path -Parent)
+			$parent = (Split-Path $Path -Parent)
 			if (! (Test-Path $parent -PathType 'Container')) {
 				New-Item $parent -ItemType 'Directory'
 			}
