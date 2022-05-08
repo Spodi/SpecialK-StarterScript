@@ -191,23 +191,26 @@ if (Get-SkTeardownStatus | Get-SkServiceProcess -SkInstallPath $SK_InstallPath) 
 if ($SK_AsAdmin) {
 	if (!(IsAdministrator)) {
 		if (IsUacEnabled) {
-			[string[]]$argList = @('-NoLogo', '-ExecutionPolicy Bypass', "-File `"$PSCommandPath`"")
+			[System.Collections.ArrayList]$argList = @('-NoLogo', '-ExecutionPolicy Bypass', "-File `"$PSCommandPath`"")
 			
 			if (!($SK_WorkingDirectory)) {
 				$SK_WorkingDirectory = Get-Location
-				$argList += "-SK_WorkingDirectory `"$SK_WorkingDirectory`""
+				$argList.Add("-SK_WorkingDirectory `"$SK_WorkingDirectory`"")
 			}
-			$argList += '-SK_AdminMode'
-			$argList += $MyInvocation.BoundParameters.GetEnumerator() | where-object -Property 'Key' -ne 'SK_AsAdmin' | ForEach-Object {
+			$argList.Add('-SK_AdminMode')	
+			$temp = $MyInvocation.BoundParameters.GetEnumerator() | where-object -Property 'Key' -ne 'SK_AsAdmin' | ForEach-Object {
 				If (($_.Value) -eq $true ) { "-$($_.Key)" } else { "-$($_.Key) `"$($_.Value)`"" }
 			}
-			$argList += $MyInvocation.UnboundArguments
+			$argList.Add($temp)
+			Remove-Variable 'temp'
+			$argList.Add($("$MyInvocation.UnboundArguments"))
 			Write-Host 'Elevating Script...'
 			[void][WPIA.ConsoleUtils]::ShowWindow($hWnd, $ConsoleMode.Hide)
 			[void][WPIA.ConsoleUtils]::ShowWindow($hWnd, $ConsoleMode.MinimizeNoActivate)
 			[void][WPIA.ConsoleUtils]::ShowWindow($hWnd, $ConsoleMode.Hide)
 			try {
 				Start-Process PowerShell.exe -PassThru -Verb Runas -WorkingDirectory (get-location).Path -ArgumentList $argList -ErrorAction 'Stop' | Wait-Process
+				Remove-Variable 'argList'
 			}
 			finally {}
 			[void][WPIA.ConsoleUtils]::ShowWindow($hWnd, $ConsoleMode.ShowNoActivate)
@@ -327,7 +330,7 @@ if (! $SK_AsAdmin) {
 	
 	$StarterHandle = $StarterPowershell.BeginInvoke()
 	$WaiterHandle = $WaiterPowershell.BeginInvoke()
-
+	Remove-Variable 'jobInput'
 
 	While (!($StarterHandle.IsCompleted) -and !($WaiterHandle.IsCompleted)) {
 		Start-Sleep -Milliseconds 250
