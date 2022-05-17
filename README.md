@@ -31,7 +31,7 @@ When not specified the script checks the following places in this order: Working
 
 Edit $SK_InstallPath inside the Script file to override the default value (so you don't have to type this parameter every time).
 ### -SK_InjectOther
-Specifies the full path to a different directory (with trailing backslash "\") that should be injected . Whitelists this directory instead of the directory of the started app. Blacklists the directly started app.
+Specifies the full path to a different directory that should be injected. Whitelists this directory instead of the directory of the started app. Blacklists the directly started app.
 
 Use this if the service stops prematurely because Special K activated in a launcher or if automatic whitelisting fails to pick the right folder.
 ### -SK_AutoStop
@@ -53,5 +53,5 @@ Internal parameter that is used with "-SK_AsAdmin".\
 Internal parameter that normally is used with "-SK_AsAdmin".\
 You can use this to set the working directory of the script.
 ### -SK_Help
-Shows this help in a new window. Essentally the same as Get-Help <ScriptName> -ShowWindow.\  
+Shows this help in a new window. Essentally the same as Get-Help <ScriptName> -ShowWindow.\
 Only works if called from a terminal.
