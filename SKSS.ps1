@@ -103,7 +103,7 @@ You can use this to set the working directory of the script.
 Shows this help in a new window. Essentally the same as Get-Help <ScriptName> -ShowWindow.
 Only works if called from a terminal.
 #>
-param([CmdletBinding(PositionalBinding = $false, DefaultParameterSetName="AutoMode")]
+param([CmdletBinding(PositionalBinding = $false, DefaultParameterSetName = "AutoMode")]
 	[Parameter(ParameterSetName = "AdminMode", Position = 0, Mandatory)]					[Parameter(ParameterSetName = "AutoMode", Position = 0, Mandatory)]						[string]	$SK_StartApp,
 	[Parameter(ParameterSetName = "AdminMode", Position = 1, ValueFromRemainingArguments)]	[Parameter(ParameterSetName = "AutoMode", Position = 1, ValueFromRemainingArguments)]	[string[]]	$SK_AppParams,
 	[Parameter(ParameterSetName = "AdminMode", Mandatory)]									[Parameter(ParameterSetName = "AutoMode")]												[string]	$SK_WorkingDirectory,
@@ -184,8 +184,23 @@ Write-Host "32Bit v$(($Versions | Where-Object 'Name' -EQ 'SpecialK32.dll').Vers
 "
 Remove-Variable 'Versions'
 $IsRunning = $null
-if (Get-SkTeardownStatus | Get-SkServiceProcess -SkInstallPath $SK_InstallPath) {
-	$IsRunning = $true
+$injectedDllPaths = Get-SkTeardownStatus | Get-SkInjectedDlls | ForEach-Object {
+	Split-Path $_.FileName -Parent
+} | Sort-Object -Unique
+$processPath = Invoke-Command {
+	Get-SkServiceProcess -Bitness 32 -Path $injectedDllPaths
+	Get-SkServiceProcess -Bitness 64 -Path $injectedDllPaths
+} | ForEach-Object {
+	Split-Path $_.Path -Parent
+} | Sort-Object -Unique
+
+if ($processPath) {
+	Write-Host $true
+	$processPath | Out-Host
+	if ((@($processPath).Count) -gt 1) {
+		Write-Warning "Multiple different SK installations are running:$($processPath | ForEach-Object {"`r`n$_"})"
+		$IsRunning = $true
+	}
 }
 
 if ($SK_AsAdmin) {
@@ -242,13 +257,18 @@ if (! $SK_StartAppPath) {
 	$SK_StartAppPath = (get-location).Path
 }
 
-if ($SK_AdminMode -and $IsRunning) {
-	Write-Host 'Stopping unelevated global injection service...'
-	Stop-SkService -SkInstallPath $SK_InstallPath
-}
-
 if (! $SK_AsAdmin) {
-	#only run if you don't spawn the second instance
+ #only run if you don't spawn the second instance
+	if ($SK_AdminMode -and $IsRunning) {
+		Write-Host 'Stopping unelevated global injection service...'
+		Stop-SkService -SkInstallPath $SK_InstallPath
+	}
+	elseif ($processPath) {
+		if (($processPath -ne (Get-SkPath)) -or ((@($processPath).Count) -gt 1)) {
+			Write-Host 'Stopping other global injection services...'
+			Stop-SkService -SkInstallPath $SK_InstallPath
+		}
+	}
 	#Whitelist handling
 	$WhitelistItem = $SK_StartAppPath
 	if ($SK_InjectOther) {
@@ -335,7 +355,8 @@ if (! $SK_AsAdmin) {
 	}
 
 
-	if ((! $IsRunning) -or ($SK_AdminMode)) {
+	if ((! $IsRunning) -or ($SK_AdminMode) -or (($processPath) -and (($processPath -ne (Get-SkPath)) -or ((@($processPath).Count) -gt 1)))) {
+		Write-host "Stopping service"
 		Stop-SkService -SkInstallPath $SK_InstallPath
 	}
 	if (($SK_AdminMode) -and ($IsRunning)) {
@@ -365,7 +386,13 @@ if (! $SK_AsAdmin) {
 
 
 }
-If (($IsRunning) -and ($SK_AsAdmin)) {
+if ($processPath) {
+	if ((! $SK_AdminMode) -and (($processPath -ne (Get-SkPath)) -or ((@($processPath).Count) -gt 1))) {
+		Write-Host 'Restarting previous Service...'
+		Start-SkService -SkInstallPath @($processPath)[1]
+	}
+}
+elseIf (($IsRunning) -and ($SK_AsAdmin)) {
 	Write-Host 'Restarting Service...'
 	Start-SkService -SkInstallPath $SK_InstallPath
 }
