@@ -196,83 +196,101 @@ function Get-SkTeardown {
 	}
 }
 
-
-function Get-SkInjectedDlls {
-	[CmdletBinding()]
-	param(
-		[Parameter(ValueFromPipeline, Position = 0, Mandatory)][ValidateSet('32', '64')]			[string]	$Bitness
-	)
-
-	process {
-		if ($Bitness -eq 32) {
-			if ([Environment]::Is64BitOperatingSystem) {
-				if ([Environment]::Is64BitProcess) {
-					#64-Bit OS and 64-bit Powershell
-					. (Join-Path ([Environment]::GetFolderPath('SystemX86')) 'WindowsPowerShell\v1.0\powershell.exe') {
-						get-process -Module -ErrorAction 'SilentlyContinue' | where-object Product -eq 'Special K' | Sort-Object -Unique
-						exit
-					}
-					return
-				}
-			}
-			#32-Bit OS and 32-bit Powershell or 64-Bit OS but 32-bit Powershell
-			get-process -Module -ErrorAction 'SilentlyContinue' | where-object Product -eq 'Special K' | Sort-Object -Unique
-		}
-	
-
-		if ($Bitness -eq 64) {
-			if (-not [Environment]::Is64BitOperatingSystem) {
-				Write-Error "This Operating System isn't capable of 64-Bit"
-				return
-			}
-			if ([Environment]::Is64BitProcess) {
-				get-process -Module -ErrorAction 'SilentlyContinue' | where-object Product -eq 'Special K' | Sort-Object -Unique
-			}
-			else {
-				. "$env:windir\SysNative\WindowsPowerShell\v1.0\powershell.exe" {
-					get-process -Module -ErrorAction 'SilentlyContinue' | where-object Product -eq 'Special K' | Sort-Object -Unique
-					exit
-				}
-			}
-		}
-	}
-}
-
 function Get-SkInjectedProcess {
 	[CmdletBinding()]
 	param(
-		[Parameter(ValueFromPipeline, Position = 0, Mandatory)][ValidateSet('32', '64')]			[string]	$Bitness
+		[Parameter(ValueFromPipeline, Position = 0, Mandatory)][ValidateSet('32', '64')]	[string]	$Bitness,
+		[Parameter()]																		[switch]	$fast	
 	)
 
 	process {
-		if ($Bitness -eq 32) {
-			if ([Environment]::Is64BitOperatingSystem) {
-				if ([Environment]::Is64BitProcess) {
-					#64-Bit OS and 64-bit Powershell
-					. (Join-Path ([Environment]::GetFolderPath('SystemX86')) 'WindowsPowerShell\v1.0\powershell.exe') {
-						get-process -ErrorAction 'SilentlyContinue' | where-object { $_.Modules.Product -eq 'Special K' } | Sort-Object -Unique
-						exit
+		if ($fast) {
+			if ($Bitness -eq 32) {
+				if ([Environment]::Is64BitOperatingSystem) {
+					if ([Environment]::Is64BitProcess) {
+						#64-Bit OS and 64-bit Powershell
+						. (Join-Path ([Environment]::GetFolderPath('SystemX86')) 'WindowsPowerShell\v1.0\powershell.exe') {
+							get-process 'SKIFsvc32', 'rundll32' -ErrorAction 'SilentlyContinue' | where-object { $_.Modules.Product -eq 'Special K' } | Sort-Object -Unique
+							exit
+						} | ForEach-Object {
+							Add-Member -InputObject $_ -MemberType 'ScriptProperty' -Name 'SkModule' -Value { ($this.Modules | where-object Product -eq 'Special K').FileName }
+							$_
+						}
+						return
 					}
-					return
+				}
+				#32-Bit OS and 32-bit Powershell or 64-Bit OS but 32-bit Powershell
+				get-process 'SKIFsvc32', 'rundll32' -ErrorAction 'SilentlyContinue' | where-object { $_.Modules.Product -eq 'Special K' } | Sort-Object -Unique | ForEach-Object {
+					Add-Member -InputObject $_ -MemberType 'ScriptProperty' -Name 'SkModule' -Value { ($this.Modules | where-object Product -eq 'Special K').FileName }
+					$_
 				}
 			}
-			#32-Bit OS and 32-bit Powershell or 64-Bit OS but 32-bit Powershell
-			get-process -ErrorAction 'SilentlyContinue' | where-object { $_.Modules.Product -eq 'Special K' } | Sort-Object -Unique
-		}
 	
 
-		if ($Bitness -eq 64) {
-			if (-not [Environment]::Is64BitOperatingSystem) {
-				Write-Error "This Operating System isn't capable of 64-Bit"
-				return
+			if ($Bitness -eq 64) {
+				if (-not [Environment]::Is64BitOperatingSystem) {
+					Write-Error "This Operating System isn't capable of 64-Bit"
+					return
+				}
+				if ([Environment]::Is64BitProcess) {
+					get-process 'SKIFsvc64', 'rundll32' -ErrorAction 'SilentlyContinue' | where-object { $_.Modules.Product -eq 'Special K' } | Sort-Object -Unique | ForEach-Object {
+						Add-Member -InputObject $_ -MemberType 'ScriptProperty' -Name 'SkModule' -Value { ($this.Modules | where-object Product -eq 'Special K').FileName }
+						$_
+					}
+				}
+				else {
+					. "$env:windir\SysNative\WindowsPowerShell\v1.0\powershell.exe" {
+						get-process 'SKIFsvc64', 'rundll32' -ErrorAction 'SilentlyContinue' | where-object { $_.Modules.Product -eq 'Special K' } | Sort-Object -Unique
+						exit
+					} | ForEach-Object {
+						Add-Member -InputObject $_ -MemberType 'ScriptProperty' -Name 'SkModule' -Value { ($this.Modules | where-object Product -eq 'Special K').FileName }
+						$_
+					}
+				}
 			}
-			if ([Environment]::Is64BitProcess) {
-				get-process -ErrorAction 'SilentlyContinue' | where-object { $_.Modules.Product -eq 'Special K' } | Sort-Object -Unique
+		}
+		else {
+			if ($Bitness -eq 32) {
+				if ([Environment]::Is64BitOperatingSystem) {
+					if ([Environment]::Is64BitProcess) {
+						#64-Bit OS and 64-bit Powershell
+						. (Join-Path ([Environment]::GetFolderPath('SystemX86')) 'WindowsPowerShell\v1.0\powershell.exe') {
+							get-process -ErrorAction 'SilentlyContinue' | where-object { $_.Modules.Product -eq 'Special K' } | Sort-Object -Unique
+							exit
+						} | ForEach-Object {
+							Add-Member -InputObject $_ -MemberType 'ScriptProperty' -Name 'SkModule' -Value { ($this.Modules | where-object Product -eq 'Special K').FileName }
+							$_
+						}
+						return
+					}
+				}
+				#32-Bit OS and 32-bit Powershell or 64-Bit OS but 32-bit Powershell
+				get-process -ErrorAction 'SilentlyContinue' | where-object { $_.Modules.Product -eq 'Special K' } | Sort-Object -Unique | ForEach-Object {
+					Add-Member -InputObject $_ -MemberType 'ScriptProperty' -Name 'SkModule' -Value { ($this.Modules | where-object Product -eq 'Special K').FileName }
+					$_
+				}
 			}
-			else {
-				. "$env:windir\SysNative\WindowsPowerShell\v1.0\powershell.exe" {
-					get-process -ErrorAction 'SilentlyContinue' | where-object { $_.Modules.Product -eq 'Special K' } | Sort-Object -Unique
-					exit
+	
+
+			if ($Bitness -eq 64) {
+				if (-not [Environment]::Is64BitOperatingSystem) {
+					Write-Error "This Operating System isn't capable of 64-Bit"
+					return
+				}
+				if ([Environment]::Is64BitProcess) {
+					get-process -ErrorAction 'SilentlyContinue' | where-object { $_.Modules.Product -eq 'Special K' } | Sort-Object -Unique | ForEach-Object {
+						Add-Member -InputObject $_ -MemberType 'ScriptProperty' -Name 'SkModule' -Value { ($this.Modules | where-object Product -eq 'Special K').FileName }
+						$_
+					}
+				}
+				else {
+					. "$env:windir\SysNative\WindowsPowerShell\v1.0\powershell.exe" {
+						get-process -ErrorAction 'SilentlyContinue' | where-object { $_.Modules.Product -eq 'Special K' } | Sort-Object -Unique
+						exit
+					} | ForEach-Object {
+						Add-Member -InputObject $_ -MemberType 'ScriptProperty' -Name 'SkModule' -Value { ($this.Modules | where-object Product -eq 'Special K').FileName }
+						$_
+					}
 				}
 			}
 		}
