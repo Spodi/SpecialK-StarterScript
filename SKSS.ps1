@@ -104,14 +104,14 @@ Shows this help in a new window. Essentally the same as Get-Help <ScriptName> -S
 Only works if called from a terminal.
 #>
 param([CmdletBinding(PositionalBinding = $false, DefaultParameterSetName = "AutoMode")]
-	[Parameter(ParameterSetName = "AdminMode", Position = 0, Mandatory)]					[Parameter(ParameterSetName = "AutoMode", Position = 0, Mandatory)]						[string]	$SK_StartApp,
-	[Parameter(ParameterSetName = "AdminMode", Position = 1, ValueFromRemainingArguments)]	[Parameter(ParameterSetName = "AutoMode", Position = 1, ValueFromRemainingArguments)]	[string[]]	$SK_AppParams,
-	[Parameter(ParameterSetName = "AdminMode", Mandatory)]									[Parameter(ParameterSetName = "AutoMode")]												[string]	$SK_WorkingDirectory,
-	[Parameter(ParameterSetName = "AdminMode")]												[Parameter(ParameterSetName = "AutoMode")]												[string]	$SK_InjectOther,
-	[Parameter(ParameterSetName = "AdminMode")]												[Parameter(ParameterSetName = "AutoMode")]	[ValidateSet("Injected", "Exit")]			[string]	$SK_AutoStop,
-	[Parameter(ParameterSetName = "AdminMode", Mandatory)]																															[switch]	$SK_AdminMode,
-	[Parameter(ParameterSetName = "ServiceControl")]										[Parameter(ParameterSetName = "AutoMode")]												[switch]	$SK_AsAdmin,
-	[Parameter(ParameterSetName = "ServiceControl")]										[Parameter(ParameterSetName = "AutoMode")]												[string]
+	[Parameter(ParameterSetName = "AutoMode", Position = 0, Mandatory)]																	[string]	$SK_StartApp,
+	[Parameter(ParameterSetName = "AutoMode", Position = 1, ValueFromRemainingArguments)]												[string[]]	$SK_AppParams,
+	[Parameter(ParameterSetName = "AutoMode")]																							[string]	$SK_WorkingDirectory,
+	[Parameter(ParameterSetName = "AutoMode")]																							[string]	$SK_InjectOther,
+	[Parameter(ParameterSetName = "AutoMode")]	[ValidateSet("Injected", "Exit")]														[string]	$SK_AutoStop,
+	[Parameter(ParameterSetName = "AdminMode", Mandatory)]																				[string]	$SK_AdminMode,
+	[Parameter(ParameterSetName = "ServiceControl")]										[Parameter(ParameterSetName = "AutoMode")]	[switch]	$SK_AsAdmin,
+	[Parameter(ParameterSetName = "ServiceControl")]										[Parameter(ParameterSetName = "AutoMode")]	[string]
 	# ------------------------------ <SETTINGS> ------------------------------
 	# Edit this to set a default value for the path to your Special K installation.
 	# DEFAULT: $SK_InstallPath = [Environment]::GetFolderPath('MyDocuments') + '\My Mods\SpecialK'
@@ -121,7 +121,7 @@ param([CmdletBinding(PositionalBinding = $false, DefaultParameterSetName = "Auto
 	# Do NOT change anything below!
 	# ------------------------------ </SETTINGS> -----------------------------
 	,
-	[Parameter(ParameterSetName = "Help")]																								[Alias("?", "h")]							[switch]	$Help
+	[Parameter(ParameterSetName = "Help")]													[Alias("?", "h")]							[switch]	$Help
 )
 
 #region -------------------------- <FUNCTIONS> -----------------------------
@@ -135,6 +135,30 @@ function IsUacEnabled {
 }
 
 #endregion ----------------------- </FUNCTIONS> ----------------------------
+
+if ($SK_AdminMode) {
+	Set-Location $SK_AdminMode
+	if (Test-Path 'temp_token' -PathType 'Leaf') {
+		$tokens = Get-Content 'temp_token' | ConvertFrom-JSON
+		$tokens | Get-Member -MemberType NoteProperty, Property | Select-Object -ExpandProperty Name | ForEach-Object {
+			if ($_ -ne 'SK_AsAdmin') {
+				if ($tokens.$_.IsPresent) {
+					Write-Host "$_ = `@{IsPresent=$true}"
+					Set-Variable -Name $_ -Value $true
+				}
+				else {
+					Write-Host "$_ = $($tokens.$_)"
+					Set-Variable -Name $_ -Value $tokens.$_
+				}
+		
+			}
+		}	
+	}
+	else { THROW }
+}
+if ((Test-Path 'temp_token' -PathType 'Leaf') -and (! $Sk_AdminMode)) {
+	Remove-Item 'temp_token'
+}
 
 if ($SK_WorkingDirectory) {
 	Set-Location $SK_WorkingDirectory
@@ -184,21 +208,20 @@ Write-Host "32Bit v$(($Versions | Where-Object 'Name' -EQ 'SpecialK32.dll').Vers
 "
 Remove-Variable 'Versions'
 $IsRunning = $null
-$injectedDllPaths = Get-SkTeardownStatus | Get-SkInjectedDlls | ForEach-Object {
-	Split-Path $_.FileName -Parent
-} | Sort-Object -Unique
-$processPath = Invoke-Command {
-	Get-SkServiceProcess -Bitness 32 -Path $injectedDllPaths
-	Get-SkServiceProcess -Bitness 64 -Path $injectedDllPaths
-} | ForEach-Object {
-	Split-Path $_.Path -Parent
-} | Sort-Object -Unique
+if (! $SK_injectedDlls) {
+	$injectedDlls = (Get-SkTeardownStatus | Get-SkInjectedProcess -fast).SkModule | Sort-Object -Unique
+}
+else {
+	$injectedDlls = $SK_injectedDlls
+}
+$ServiceProcess = Invoke-Command {
+	if ($injectedDlls -like '*32.dll') { Get-SkServiceProcess -Bitness 32 -Path (Sort-Object -Unique (Split-Path $injectedDlls)) }
+	if ($injectedDlls -like '*64.dll') { Get-SkServiceProcess -Bitness 64 -Path (Sort-Object -Unique (Split-Path $injectedDlls)) }
+} | ForEach-Object { Split-Path $_.Path } | Sort-Object -Unique
 
-if ($processPath) {
-	Write-Host $true
-	$processPath | Out-Host
-	if ((@($processPath).Count) -gt 1) {
-		Write-Warning "Multiple different SK installations are running:$($processPath | ForEach-Object {"`r`n$_"})"
+if ($ServiceProcess) {
+	if ((@($ServiceProcess).Count) -gt 1) {
+		Write-Warning "Multiple different SK installations are running:$(Sort-Object -Unique (Split-Path $injectedDlls) | ForEach-Object {"`r`n$_"})"
 		$IsRunning = $true
 	}
 }
@@ -206,17 +229,13 @@ if ($processPath) {
 if ($SK_AsAdmin) {
 	if (!(IsAdministrator)) {
 		if (IsUacEnabled) {
-			$argList = @('-NoLogo', '-ExecutionPolicy Bypass', "-File `"$PSCommandPath`"")
-			
-			if (!($SK_WorkingDirectory)) {
-				$SK_WorkingDirectory = Get-Location
-				$argList += "-SK_WorkingDirectory `"$SK_WorkingDirectory`""
-			}
-			$argList += '-SK_AdminMode'	
-			$argList += $MyInvocation.BoundParameters.GetEnumerator() | where-object -Property 'Key' -ne 'SK_AsAdmin' | ForEach-Object {
-				If (($_.Value) -eq $true ) { "-$($_.Key)" } else { "-$($_.Key) `"$($_.Value)`"" }
-			}
-			$argList += $MyInvocation.UnboundArguments
+			$argList = @('-NoLogo', '-ExecutionPolicy Bypass', '-NoExit', "-File `"$PSCommandPath`"")
+			$argList += "-SK_AdminMode `"$(Get-Location)`""
+
+			$tokenFile = $MyInvocation.BoundParameters
+			$tokenFile['SK_AppParams'] = $SK_AppParams
+			$tokenFile['injectedDlls'] = $injectedDlls
+			$tokenFile | ConvertTo-Json | Out-File 'temp_token'
 			Write-Host 'Elevating Script...'
 			[void][WPIA.ConsoleUtils]::ShowWindow($hWnd, $ConsoleMode.Hide)
 			[void][WPIA.ConsoleUtils]::ShowWindow($hWnd, $ConsoleMode.MinimizeNoActivate)
@@ -224,6 +243,9 @@ if ($SK_AsAdmin) {
 			try {
 				Start-Process PowerShell.exe -PassThru -Verb Runas -WorkingDirectory (get-location).Path -ArgumentList $argList -ErrorAction 'Stop' | Wait-Process
 				Remove-Variable 'argList'
+				if (Test-Path 'temp_token' -PathType 'Leaf') {
+					Remove-Item 'temp_token'
+				}
 			}
 			finally {}
 			[void][WPIA.ConsoleUtils]::ShowWindow($hWnd, $ConsoleMode.ShowNoActivate)
@@ -263,8 +285,8 @@ if (! $SK_AsAdmin) {
 		Write-Host 'Stopping unelevated global injection service...'
 		Stop-SkService -SkInstallPath $SK_InstallPath
 	}
-	elseif ($processPath) {
-		if (($processPath -ne (Get-SkPath)) -or ((@($processPath).Count) -gt 1)) {
+	elseif ($IsRunning) {
+		if (((Sort-Object -Unique (Split-Path $injectedDlls)) -ne (Get-SkPath)) -or ((@($ServiceProcess).Count) -gt 1)) {
 			Write-Host 'Stopping other global injection services...'
 			Stop-SkService -SkInstallPath $SK_InstallPath
 		}
@@ -355,7 +377,7 @@ if (! $SK_AsAdmin) {
 	}
 
 
-	if ((! $IsRunning) -or ($SK_AdminMode) -or (($processPath) -and (($processPath -ne (Get-SkPath)) -or ((@($processPath).Count) -gt 1)))) {
+	if ((! $IsRunning) -or ($SK_AdminMode) -or (($ServiceProcess) -and (((Sort-Object -Unique (Split-Path $injectedDlls)) -ne (Get-SkPath)) -or ((@($ServiceProcess).Count) -gt 1)))) {
 		Write-host "Stopping service"
 		Stop-SkService -SkInstallPath $SK_InstallPath
 	}
@@ -386,10 +408,10 @@ if (! $SK_AsAdmin) {
 
 
 }
-if ($processPath) {
-	if ((! $SK_AdminMode) -and (($processPath -ne (Get-SkPath)) -or ((@($processPath).Count) -gt 1))) {
+if ($IsRunning) {
+	if ((! $SK_AdminMode) -and (((Sort-Object -Unique (Split-Path $injectedDlls)) -ne (Get-SkPath)) -or ((@($ServicePath).Count) -gt 1))) {
 		Write-Host 'Restarting previous Service...'
-		Start-SkService -SkInstallPath @($processPath)[1]
+		Start-SkService -SkInstallPath @(Sort-Object -Unique (Split-Path $injectedDlls))[1]
 	}
 }
 elseIf (($IsRunning) -and ($SK_AsAdmin)) {
