@@ -213,16 +213,20 @@ function Get-SkInjectedProcess {
 							get-process 'SKIFsvc32', 'rundll32' -ErrorAction 'SilentlyContinue' | where-object { $_.Modules.Product -eq 'Special K' } | Sort-Object -Unique
 							exit
 						} | ForEach-Object {
-							Add-Member -InputObject $_ -MemberType 'ScriptProperty' -Name 'SkModule' -Value { ($this.Modules | where-object Product -eq 'Special K').FileName }
-							$_
+							if ($_) {
+								Add-Member -InputObject $_ -MemberType 'ScriptProperty' -Name 'SkModule' -Value { ($this.Modules | where-object Product -eq 'Special K').FileName }
+								$_
+							}
 						}
 						return
 					}
 				}
 				#32-Bit OS and 32-bit Powershell or 64-Bit OS but 32-bit Powershell
 				get-process 'SKIFsvc32', 'rundll32' -ErrorAction 'SilentlyContinue' | where-object { $_.Modules.Product -eq 'Special K' } | Sort-Object -Unique | ForEach-Object {
-					Add-Member -InputObject $_ -MemberType 'ScriptProperty' -Name 'SkModule' -Value { ($this.Modules | where-object Product -eq 'Special K').FileName }
-					$_
+					if ($_) {
+						Add-Member -InputObject $_ -MemberType 'ScriptProperty' -Name 'SkModule' -Value { ($this.Modules | where-object Product -eq 'Special K').FileName }
+						$_
+					}
 				}
 			}
 	
@@ -234,8 +238,10 @@ function Get-SkInjectedProcess {
 				}
 				if ([Environment]::Is64BitProcess) {
 					get-process 'SKIFsvc64', 'rundll32' -ErrorAction 'SilentlyContinue' | where-object { $_.Modules.Product -eq 'Special K' } | Sort-Object -Unique | ForEach-Object {
-						Add-Member -InputObject $_ -MemberType 'ScriptProperty' -Name 'SkModule' -Value { ($this.Modules | where-object Product -eq 'Special K').FileName }
-						$_
+						if ($_) {
+							Add-Member -InputObject $_ -MemberType 'ScriptProperty' -Name 'SkModule' -Value { ($this.Modules | where-object Product -eq 'Special K').FileName }
+							$_
+						}
 					}
 				}
 				else {
@@ -243,8 +249,10 @@ function Get-SkInjectedProcess {
 						get-process 'SKIFsvc64', 'rundll32' -ErrorAction 'SilentlyContinue' | where-object { $_.Modules.Product -eq 'Special K' } | Sort-Object -Unique
 						exit
 					} | ForEach-Object {
-						Add-Member -InputObject $_ -MemberType 'ScriptProperty' -Name 'SkModule' -Value { ($this.Modules | where-object Product -eq 'Special K').FileName }
-						$_
+						if ($_) {
+							Add-Member -InputObject $_ -MemberType 'ScriptProperty' -Name 'SkModule' -Value { ($this.Modules | where-object Product -eq 'Special K').FileName }
+							$_
+						}
 					}
 				}
 			}
@@ -335,7 +343,7 @@ function Get-SkServiceProcess {
 				Try {
 					$ID = Get-Content -LiteralPath $Path -ErrorAction 'Stop'
 					$Process = Get-Process -ID $ID -ErrorAction 'Stop'
-					Write-Output $Process
+					if ($Process) { Write-Output $Process }
 					break
 				}
 				Catch {
@@ -351,7 +359,8 @@ function Get-SkServiceProcess {
 					$Process = Get-Process -ID $ID -ErrorAction 'Stop'
 				}
 				catch [Microsoft.PowerShell.Commands.ProcessCommandException] {}
-				Write-Output $Process
+				if ($Process) { Write-Output $Process }
+				
 			}
 		}
 			
@@ -450,7 +459,7 @@ Function Start-SkService {
 				return
 			}
 		}
-		$SK_Event32 = Get-SkServiceProcess -Bitness '32' -Timeout '10000'
+		$SK_Event32 = Get-SkServiceProcess -Path $SkInstallPath -Bitness '32' -Timeout '10000'
 		if (! $SK_Event32) {
 			if (Get-SkTeardownStatus -contains '32' ) {
 				Write-Error 'Failed to start 32-bit Service (Timeout), but another instance might be running or SK is still stuck somewhere.'
@@ -484,7 +493,7 @@ Function Start-SkService {
 					return
 				}
 			}
-			$SK_Event64 = Get-SkServiceProcess -Bitness '64' -Timeout '10000'
+			$SK_Event64 = Get-SkServiceProcess -Path $SkInstallPath -Bitness '64' -Timeout '10000'
 			if (! $SK_Event64) {
 				if (Get-SkTeardownStatus -contains '64' ) {
 					Write-Error 'Failed to start 64bit Service (Timeout), but another instance might be running or SK is still stuck somewhere.'

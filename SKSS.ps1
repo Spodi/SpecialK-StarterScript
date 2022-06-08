@@ -136,22 +136,22 @@ function IsUacEnabled {
 
 #endregion ----------------------- </FUNCTIONS> ----------------------------
 
+#Importing file for AdminMode parameters
 if ($SK_AdminMode) {
 	Set-Location $SK_AdminMode
 	if (Test-Path 'temp_token' -PathType 'Leaf') {
 		$tokens = Get-Content 'temp_token' | ConvertFrom-JSON
 		$tokens | Get-Member -MemberType NoteProperty, Property | Select-Object -ExpandProperty Name | ForEach-Object {
-			if ($_ -ne 'SK_AsAdmin') {
-				if ($tokens.$_.IsPresent) {
-					Write-Host "$_ = `@{IsPresent=$true}"
-					Set-Variable -Name $_ -Value $true
-				}
-				else {
-					Write-Host "$_ = $($tokens.$_)"
-					Set-Variable -Name $_ -Value $tokens.$_
-				}
-		
+
+			if ($tokens.$_.IsPresent) {
+				Write-Host "$_ = `@{IsPresent=$true}"
+				Set-Variable -Name $_ -Value $true
 			}
+			else {
+				Write-Host "$_ = $($tokens.$_)"
+				Set-Variable -Name $_ -Value $tokens.$_
+			}
+		
 		}	
 	}
 	else { THROW }
@@ -208,34 +208,40 @@ Write-Host "32Bit v$(($Versions | Where-Object 'Name' -EQ 'SpecialK32.dll').Vers
 "
 Remove-Variable 'Versions'
 $IsRunning = $null
-if (! $SK_injectedDlls) {
+$ServicePath = $null
+$ServiceProcess = $null
+if (! $injectedDlls) {
 	$injectedDlls = (Get-SkTeardownStatus | Get-SkInjectedProcess -fast).SkModule | Sort-Object -Unique
 }
-else {
-	$injectedDlls = $SK_injectedDlls
+if ($injectedDlls) {
+	$Path = Split-Path $injectedDlls | Sort-Object -Unique
+	$ServiceProcess = Invoke-Command {
+		if ($injectedDlls -like '*32.dll') { $Path | ForEach-Object { Get-SkServiceProcess -Bitness 32 -Path $_ }}
+		if ($injectedDlls -like '*64.dll') { $Path | ForEach-Object { Get-SkServiceProcess -Bitness 64 -Path $_ }}
+	} | ForEach-Object { Split-Path $_.Path } | Sort-Object -Unique
 }
-$ServiceProcess = Invoke-Command {
-	if ($injectedDlls -like '*32.dll') { Get-SkServiceProcess -Bitness 32 -Path (Sort-Object -Unique (Split-Path $injectedDlls)) }
-	if ($injectedDlls -like '*64.dll') { Get-SkServiceProcess -Bitness 64 -Path (Sort-Object -Unique (Split-Path $injectedDlls)) }
-} | ForEach-Object { Split-Path $_.Path } | Sort-Object -Unique
 
 if ($ServiceProcess) {
+	$ServicePath = Split-Path $ServiceProcess | Get-Item
+	$IsRunning = $true
 	if ((@($ServiceProcess).Count) -gt 1) {
-		Write-Warning "Multiple different SK installations are running:$(Sort-Object -Unique (Split-Path $injectedDlls) | ForEach-Object {"`r`n$_"})"
-		$IsRunning = $true
+		Write-Warning "Multiple different SK installations are running, only the first one will be restarted:$ServicePath | ForEach-Object {"`r`n$_"})"
 	}
 }
+else { $ServicePath = Get-SkPath $SK_InstallPath }
 
 if ($SK_AsAdmin) {
 	if (!(IsAdministrator)) {
 		if (IsUacEnabled) {
 			$argList = @('-NoLogo', '-ExecutionPolicy Bypass', "-File `"$PSCommandPath`"")
 			$argList += "-SK_AdminMode `"$(Get-Location)`""
-
+			#Screw it, I will use a file for parameters, or else qoting is breaking things left and right
 			$tokenFile = $MyInvocation.BoundParameters
-			$tokenFile['SK_AppParams'] = $SK_AppParams
-			$tokenFile['injectedDlls'] = $injectedDlls
+			if ($SK_AppParams) { $tokenFile['SK_AppParams'] = $SK_AppParams }
+			if ($injectedDlls) { $tokenFile['injectedDlls'] = $injectedDlls }
+			[void]$tokenFile.Remove('SK_AsAdmin')
 			$tokenFile | ConvertTo-Json | Out-File 'temp_token'
+			Remove-Variable 'tokenFile'
 			Write-Host 'Elevating Script...'
 			[void][WPIA.ConsoleUtils]::ShowWindow($hWnd, $ConsoleMode.Hide)
 			[void][WPIA.ConsoleUtils]::ShowWindow($hWnd, $ConsoleMode.MinimizeNoActivate)
@@ -286,7 +292,7 @@ if (! $SK_AsAdmin) {
 		Stop-SkService -SkInstallPath $SK_InstallPath
 	}
 	elseif ($IsRunning) {
-		if (((Sort-Object -Unique (Split-Path $injectedDlls)) -ne (Get-SkPath)) -or ((@($ServiceProcess).Count) -gt 1)) {
+		if (($ServicePath -ne (Get-SkPath $SK_InstallPath)) -or ((@($ServiceProcess).Count) -gt 1)) {
 			Write-Host 'Stopping other global injection services...'
 			Stop-SkService -SkInstallPath $SK_InstallPath
 		}
@@ -377,7 +383,7 @@ if (! $SK_AsAdmin) {
 	}
 
 
-	if ((! $IsRunning) -or ($SK_AdminMode) -or (($ServiceProcess) -and (((Sort-Object -Unique (Split-Path $injectedDlls)) -ne (Get-SkPath)) -or ((@($ServiceProcess).Count) -gt 1)))) {
+	if ((! $IsRunning) -or ($SK_AdminMode) -or ($ServicePath -ne (Get-SkPath $SK_InstallPath)) -or ((@($ServiceProcess).Count) -gt 1)) {
 		Write-host "Stopping service"
 		Stop-SkService -SkInstallPath $SK_InstallPath
 	}
@@ -408,16 +414,18 @@ if (! $SK_AsAdmin) {
 
 
 }
-if ($IsRunning) {
-	if ((! $SK_AdminMode) -and (((Sort-Object -Unique (Split-Path $injectedDlls)) -ne (Get-SkPath)) -or ((@($ServicePath).Count) -gt 1))) {
-		Write-Host 'Restarting previous Service...'
-		Start-SkService -SkInstallPath @(Sort-Object -Unique (Split-Path $injectedDlls))[1]
+if (! $SK_AdminMode) {
+	if ($IsRunning -and (($ServicePath -ne (Get-SkPath $SK_InstallPath)) -or ((@($ServiceProcess).Count) -gt 1))) {
+		Write-Host "Restarting previous Service... $ServicePath"
+		
+		Start-SkService -path @($ServicePath)[0]
+	}
+	elseIf (($IsRunning) -and ($SK_AsAdmin)) {
+		Write-Host 'Restarting Service...'
+		Start-SkService -path $SK_InstallPath
 	}
 }
-elseIf (($IsRunning) -and ($SK_AsAdmin)) {
-	Write-Host 'Restarting Service...'
-	Start-SkService -SkInstallPath $SK_InstallPath
-}
+
 Write-Host '
 Done!'
 EXIT
