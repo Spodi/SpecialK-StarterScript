@@ -229,7 +229,7 @@ if ($ServiceProcess) {
 if ($SK_AsAdmin) {
 	if (!(IsAdministrator)) {
 		if (IsUacEnabled) {
-			$argList = @('-NoLogo', '-ExecutionPolicy Bypass', '-NoExit', "-File `"$PSCommandPath`"")
+			$argList = @('-NoLogo', '-ExecutionPolicy Bypass', "-File `"$PSCommandPath`"")
 			$argList += "-SK_AdminMode `"$(Get-Location)`""
 
 			$tokenFile = $MyInvocation.BoundParameters
