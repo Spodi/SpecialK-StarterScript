@@ -62,5 +62,5 @@ Only works if called from a terminal.
 
 ## EXAMPLE
 An example shortcut to start a game and SK as admin would look like this:\
-Target: `C:\Users\Spodi\Scripts\SpecialK\SKSS\SKSS-reboot\SKSS.bat "unlockfps.exe" -SK_AsAdmin`\
+Target: `C:\Users\Spodi\Scripts\SpecialK\SKSS\SKSS-reboot\SKSS.bat "unlockfps_clr.exe" -SK_AsAdmin`\
 Start in: `"D:\Program Files\Genshin Impact"`
