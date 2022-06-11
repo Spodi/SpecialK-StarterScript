@@ -1,3 +1,7 @@
+2.3.2
+	[*]Much better logic for portable installs, fixes unlogical behavior with those.
+	[#]Fixed Parameters in Admin mode once again.
+	[*]Possibly other things I forgot.
 2.3.1
 	[#]Fixed launch parameter.
 	[#]Fixed failsafes not working.
