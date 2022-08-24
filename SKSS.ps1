@@ -109,6 +109,7 @@ param([CmdletBinding(PositionalBinding = $false, DefaultParameterSetName = "Auto
 	[Parameter(ParameterSetName = "AutoMode")]																							[string]	$SK_WorkingDirectory,
 	[Parameter(ParameterSetName = "AutoMode")]																							[string]	$SK_InjectOther,
 	[Parameter(ParameterSetName = "AutoMode")]	[ValidateSet("Injected", "Exit")]														[string]	$SK_AutoStop,
+	[Parameter(ParameterSetName = "AutoMode")]																							[int]		$SK_InjectDelay,
 	[Parameter(ParameterSetName = "AdminMode", Mandatory)]																				[string]	$SK_AdminMode,
 	[Parameter(ParameterSetName = "ServiceControl")]										[Parameter(ParameterSetName = "AutoMode")]	[switch]	$SK_AsAdmin,
 	[Parameter(ParameterSetName = "ServiceControl")]										[Parameter(ParameterSetName = "AutoMode")]	[string]
@@ -196,7 +197,7 @@ Write-Host -NoNewline -ForegroundColor 'White' 'S'
 Write-Host -NoNewline -ForegroundColor 'Gray' 'tarter '
 Write-Host -NoNewline -ForegroundColor 'White' 'S'
 Write-Host -ForegroundColor 'Gray' 'cript'
-Write-Host 'v2.3.2
+Write-Host 'v22.08.24
 '
 
 Write-Host -NoNewline -ForegroundColor 'White' 'S'
@@ -216,8 +217,8 @@ if (! $injectedDlls) {
 if ($injectedDlls) {
 	$Path = Split-Path $injectedDlls | Sort-Object -Unique
 	$ServiceProcess = Invoke-Command {
-		if ($injectedDlls -like '*32.dll') { $Path | ForEach-Object { Get-SkServiceProcess -Bitness 32 -Path $_ }}
-		if ($injectedDlls -like '*64.dll') { $Path | ForEach-Object { Get-SkServiceProcess -Bitness 64 -Path $_ }}
+		if ($injectedDlls -like '*32.dll') { $Path | ForEach-Object { Get-SkServiceProcess -Bitness 32 -Path $_ } }
+		if ($injectedDlls -like '*64.dll') { $Path | ForEach-Object { Get-SkServiceProcess -Bitness 64 -Path $_ } }
 	} | ForEach-Object { Split-Path $_.Path } | Sort-Object -Unique
 }
 
@@ -315,9 +316,10 @@ if (! $SK_AsAdmin) {
 	}
 
 
-
-	Write-Host 'Starting global injection service...'
-	Start-SkService -SkInstallPath $SK_InstallPath
+	if (!$SK_InjectDelay) {
+		Write-Host 'Starting global injection service...'
+		Start-SkService -SkInstallPath $SK_InstallPath
+	}
 
 
 	Write-Host "Starting `"$SK_StartApp`" $SK_AppParams"
@@ -377,6 +379,11 @@ if (! $SK_AsAdmin) {
 	$StarterHandle = $StarterPowershell.BeginInvoke()
 	$WaiterHandle = $WaiterPowershell.BeginInvoke()
 	Remove-Variable 'jobInput'
+
+	if ($SK_InjectDelay) {
+		Start-Sleep -Seconds $SK_InjectDelay
+		Start-SkService -SkInstallPath $SK_InstallPath
+	}
 
 	While (!($StarterHandle.IsCompleted) -and !($WaiterHandle.IsCompleted)) {
 		Start-Sleep -Milliseconds 250
