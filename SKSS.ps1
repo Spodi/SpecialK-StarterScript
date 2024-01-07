@@ -212,7 +212,7 @@ $IsRunning = $null
 $ServicePath = $null
 $ServiceProcess = $null
 if (! $injectedDlls) {
-	$injectedDlls = (Get-SkTeardownStatus | Get-SkInjectedProcess -fast).SkModule | Sort-Object -Unique
+	$injectedDlls = (Get-SkTeardownStatus | Get-SkInjectedProcess -InjectorOnly).SkModule | Sort-Object -Unique
 }
 if ($injectedDlls) {
 	$Path = Split-Path $injectedDlls | Sort-Object -Unique
